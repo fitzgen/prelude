@@ -1,0 +1,27 @@
+;; Rust path
+(prelude-require-packages '(rust-mode racer))
+(autoload 'rust-mode "rust-mode" nil t)
+(add-to-list 'auto-mode-alist '("\\.rs\\'" . rust-mode))
+
+;; Racer rust autocomplete config
+(setq racer-rust-src-path (expand-file-name "~/src/rust/src"))
+(setq racer-cmd (expand-file-name "~/src/racer/target/release/racer"))
+(eval-after-load "rust-mode" '(require 'racer))
+
+(eval-after-load "rust-mode" '(require 'flycheck))
+(add-hook 'flycheck-mode-hook #'flycheck-rust-setup)
+
+(add-hook 'rust-mode-hook
+          '(lambda ()
+             (linum-mode t)
+             ;; (flycheck-mode t)
+
+             (local-set-key (kbd "C-c C-c") 'my-compile)
+
+             (racer-activate)
+             (racer-turn-on-eldoc)
+             (local-set-key (kbd "M-.") #'racer-find-definition)
+             (local-set-key (kbd "TAB") #'racer-complete-or-indent)
+             ))
+
+(provide 'my-rust)
