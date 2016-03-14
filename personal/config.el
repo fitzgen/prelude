@@ -1,5 +1,9 @@
 (require 'page-ext)
 
+
+(add-to-list 'package-archives
+             '("marmalade" . "http://marmalade-repo.org/packages/"))
+
 ;; ============================== UTILITIES ====================================
 
 (fset 'down-and-tab
@@ -11,44 +15,45 @@
 (fset 'triple-split-window
       [?\C-x ?1 ?\C-x ?3 ?\C-x ?3 ?\C-x ?+ ?\C-x ?b return ?\C-x ?o ?\C-x ?b return ?\C-x ?o ?\C-x ?b return ?\C-x ?o ?\C-x ?o ?\C-x ?b return ?\C-x ?o ?\C-x ?o ?\C-x ?o])
 
-(defun my-compile (cmd)
-  ""
-  (interactive
-   (list (compilation-read-command compile-command)))
-  (if (get-buffer "*shell*")
-      (switch-to-buffer-other-window "*shell*")
-    (shell))
-  (clear-shell-buffer)
-  (end-of-buffer)
-  (comint-kill-input)
-  (insert cmd)
-  (end-of-line)
-  (comint-send-input)
-  (unless (equal cmd (eval compile-command))
-    (setq compile-command cmd)))
-
 
 ;; ============================== HOTKEYS ==============================
 
+;; Undo prelude's mucking with C-a
+(global-set-key [remap move-beginning-of-line]
+                'move-beginning-of-line)
+
+(define-key prelude-mode-map (kbd "C-o") 'prelude-smart-open-line)
+(define-key prelude-mode-map (kbd "M-o") 'prelude-smart-open-line-above)
+
 (global-set-key (kbd "M-#") 'comment-or-uncomment-region)
 (global-set-key "\M-g" 'goto-line)
-(global-set-key (kbd "C-o") 'down-and-tab)
-(global-set-key (kbd "M-o") 'up-and-tab)
 (global-set-key (kbd "C-x 4") 'triple-split-window)
 (global-set-key (kbd "C-c C-l") 'pages-directory)
 
 ;; Make TAB cycle through completions.
 (define-key company-active-map [tab] 'company-complete-common-or-cycle)
 
-;; Undo prelude's mucking with C-a
-(global-set-key [remap move-beginning-of-line]
-                'move-beginning-of-line)
-
 ;; ============================== SETTINGS TWEAKS ==============================
+
+(let ((trustfile
+       (replace-regexp-in-string
+        "\\\\" "/"
+        (replace-regexp-in-string
+         "\n" ""
+         (shell-command-to-string "python -m certifi")))))
+  (setq tls-program
+        (list
+         (format "gnutls-cli%s --x509cafile %s -p %%p %%h"
+                 (if (eq window-system 'w32) ".exe" "") trustfile)))
+  (setq gnutls-verify-error t)
+  (setq gnutls-trustfiles (list trustfile)))
 
 ;; Start the emacs server, so that programs that need to open $EDITOR open
 ;; emacs.
 (server-start)
+
+;; Company mode should put annotations on the right.
+(setq company-tooltip-align-annotations t)
 
 ;; Keep the menu bar.
 (menu-bar-mode 1)
@@ -83,9 +88,10 @@
 
 ;; Highlight the line that the cursor is on.
 (global-hl-line-mode 1)
-(set-face-background 'hl-line "#222233")
+(set-face-background 'hl-line "#335")
 
 (set-face-background 'highlight "#225")
+(set-face-background 'region "#225")
 (set-face-background 'cursor "#fff")
 
 ;; Highlight matching parentheses.
@@ -137,4 +143,22 @@
 
 (setq completion-cycle-threshold t)
 
+(setq pages-directory-buffer-narrowing-p t)
+(put 'narrow-to-page 'disabled nil)
+(put 'narrow-to-region 'disabled nil)
+
+(require 'flycheck)
+(flycheck-define-checker proselint
+  "A linter for prose."
+  :command ("proselint" source-inplace)
+  :error-patterns
+  ((warning line-start (file-name) ":" line ":" column ": "
+            (id (one-or-more (not (any " "))))
+            (message (one-or-more not-newline)
+                     (zero-or-more "\n" (any " ") (one-or-more not-newline)))
+            line-end))
+  :modes (text-mode markdown-mode gfm-mode))
+(add-to-list 'flycheck-checkers 'proselint)
+
 (provide 'config)
+;;; config.el ends here

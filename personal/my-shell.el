@@ -9,13 +9,11 @@
   (let ((comint-buffer-maximum-size 2))
     (comint-truncate-buffer)))
 
-clean-buffer-list
-
 ;; Fix color in shell and make prompt read only.
 (add-hook 'shell-mode-hook
           '(lambda ()
              (compilation-shell-minor-mode t)
-             (local-set-key "\C-cl" 'clear-shell-buffer)
+             (local-set-key (kbd "C-c l") 'clear-shell-buffer)
              (setq indent-tabs-mode nil)
              (setq tab-width 8)
              (ansi-color-for-comint-mode-on)

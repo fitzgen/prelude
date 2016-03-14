@@ -1,6 +1,6 @@
 (require 'my-compile)
 
-(add-hook 'c-mode-hook
+(add-hook 'c++-mode-hook
           '(lambda ()
              (linum-mode t)
              (local-set-key (kbd "C-c C-c") 'my-compile)
@@ -10,4 +10,4 @@
              ;; (ignore-errors (flymake-mode t))
              ))
 
-(provide 'my-c)
+(provide 'my-cpp)
