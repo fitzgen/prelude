@@ -35,10 +35,16 @@
 ;;       (require 'tern-auto-complete)
 ;;       (tern-ac-setup)))
 
+
+(add-to-list 'auto-mode-alist '("\\.js\\'" . js-mode))
+
+(require 'flycheck)
+(setq-default flycheck-disabled-checkers
+              (append flycheck-disabled-checkers
+                      '(javascript-jshint)))
+
 (add-hook 'js-mode-hook '(lambda ()
-                           (auto-complete-mode t)
-                           ;; (flycheck-mode t)
-                           (tern-mode t)
+                           (flycheck-mode t)
                            (linum-mode t)))
 
 ;; Make js2-mode an alias for js-mode so that source which specifies
