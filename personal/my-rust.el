@@ -1,3 +1,5 @@
+(require 'rustfmt)
+
 ;; Rust path
 (prelude-require-packages '(rust-mode racer))
 (autoload 'rust-mode "rust-mode" nil t)
@@ -21,7 +23,10 @@
              (racer-activate)
              (racer-turn-on-eldoc)
              (local-set-key (kbd "M-.") #'racer-find-definition)
-             (local-set-key (kbd "TAB") #'racer-complete-or-indent)
+             ;; (local-set-key (kbd "TAB") #'racer-complete-or-indent)
              ))
+
+(setq rustfmt-bin (expand-file-name "~/.cargo/bin/rustfmt"))
+;; (add-hook 'rust-mode-hook #'rustfmt-enable-on-save)
 
 (provide 'my-rust)
