@@ -43,7 +43,22 @@
               (append flycheck-disabled-checkers
                       '(javascript-jshint)))
 
+(defun maybe-enable-mozilla-eslint ()
+  (interactive)
+  (when (buffer-file-name)
+    (let ((base (file-name-nondirectory (buffer-file-name))))
+      (when (string-match "^\\([a-z]+_\\)" base)
+        (setq-local flycheck-temp-prefix (match-string 1 base))))
+    (let ((base-dir (locate-dominating-file (buffer-file-name)
+                                            ".eslintignore")))
+      (when base-dir
+        (let ((eslint (expand-file-name
+                       "testing/eslint/node_modules/.bin/eslint" base-dir)))
+          (when (file-exists-p eslint)
+            (setq-local flycheck-javascript-eslint-executable eslint)))))))
+
 (add-hook 'js-mode-hook '(lambda ()
+                           (maybe-enable-mozilla-eslint)
                            (flycheck-mode t)
                            (linum-mode t)))
 
