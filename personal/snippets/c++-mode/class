@@ -1,0 +1,16 @@
+# -*- mode: snippet -*-
+# name: Class Definition
+# key: class
+# --
+/**
+ * ${2:TODO FITZGEN}
+ */
+class ${1:MoveOnlyClass}
+{
+  private:
+    $1(const $1&) = delete;
+    $1& operator=(const $1&) = delete;
+
+  public:
+    $1() { }
+};
