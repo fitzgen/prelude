@@ -21,8 +21,8 @@
 (global-set-key [remap move-beginning-of-line]
                 'move-beginning-of-line)
 
-(define-key prelude-mode-map (kbd "C-o") 'prelude-smart-open-line)
-(define-key prelude-mode-map (kbd "M-o") 'prelude-smart-open-line-above)
+(define-key prelude-mode-map (kbd "C-o") 'crux-smart-open-line)
+(define-key prelude-mode-map (kbd "M-o") 'crux-smart-open-line-above)
 
 (global-set-key (kbd "M-#") 'comment-or-uncomment-region)
 (global-set-key "\M-g" 'goto-line)
