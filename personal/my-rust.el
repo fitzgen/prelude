@@ -6,8 +6,8 @@
 (add-to-list 'auto-mode-alist '("\\.rs\\'" . rust-mode))
 
 ;; Racer rust autocomplete config
-(setq racer-rust-src-path (expand-file-name "~/src/rust/src"))
-(setq racer-cmd (expand-file-name "~/src/racer/target/release/racer"))
+(setq racer-rust-src-path (expand-file-name "~/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/src/"))
+(setq racer-cmd (expand-file-name "~/.cargo/bin/racer"))
 (eval-after-load "rust-mode" '(require 'racer))
 
 (eval-after-load "rust-mode" '(require 'flycheck))
