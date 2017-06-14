@@ -30,7 +30,8 @@
 (global-set-key (kbd "C-c C-l") 'pages-directory)
 
 ;; Make TAB cycle through completions.
-(define-key company-active-map [tab] 'company-complete-common-or-cycle)
+(with-eval-after-load 'company
+  (define-key company-active-map [tab] 'company-complete-common-or-cycle))
 
 ;; ============================== SETTINGS TWEAKS ==============================
 
