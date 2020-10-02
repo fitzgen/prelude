@@ -1,7 +1,7 @@
 (require 'page-ext)
 
-(add-to-list 'package-archives
-             '("marmalade" . "http://marmalade-repo.org/packages/"))
+;; (add-to-list 'package-archives
+;;              '("marmalade" . "http://marmalade-repo.org/packages/"))
 
 ;; ============================== UTILITIES ====================================
 
@@ -20,6 +20,8 @@
 ;; Undo prelude's mucking with C-a
 (global-set-key [remap move-beginning-of-line]
                 'move-beginning-of-line)
+;; Undo prelude's mucking with C-o
+(global-set-key [remap other-window] 'other-window)
 
 (define-key prelude-mode-map (kbd "C-o") 'crux-smart-open-line)
 (define-key prelude-mode-map (kbd "M-o") 'crux-smart-open-line-above)
@@ -54,6 +56,8 @@
 
 ;; Company mode should put annotations on the right.
 (setq company-tooltip-align-annotations t)
+(setq company-minimum-prefix-length 1)
+(setq company-idle-delay 0.0)
 
 ;; Keep the menu bar.
 (menu-bar-mode 1)
@@ -73,8 +77,11 @@
 (setq mouse-wheel-progressive-speed nil)
 
 ;; Delete trailing whitespace on save.
+(setq should-delete-trailing-whitespace t)
 (add-hook 'before-save-hook
-          'delete-trailing-whitespace)
+          (lambda ()
+            (when should-delete-trailing-whitespace
+              (delete-trailing-whitespace))))
 
 ;; Get rid of thick separators.
 (fringe-mode 0)
@@ -82,7 +89,8 @@
 ;; Enable linum-mode for all modes except inside special buffers.
 (add-hook 'change-major-mode-hook
           (lambda ()
-            (unless (string-match "^\*.+\*$" (buffer-name))
+            (unless (or (string-match "^\*.+\*$" (buffer-name))
+                        (string-match "^magit:.\*$" (buffer-name)))
               (linum-mode t))))
 
 ;; Change the format of linum-mode and add a hotkey to toggle it on
@@ -92,10 +100,9 @@
 
 ;; Highlight the line that the cursor is on.
 (global-hl-line-mode 1)
-(set-face-background 'hl-line "#335")
-
-(set-face-background 'highlight "#225")
-(set-face-background 'region "#225")
+;; (set-face-background 'hl-line "#557")
+;; (set-face-background 'highlight "#225")
+;; (set-face-background 'region "#225")
 (set-face-background 'cursor "#fff")
 
 ;; Highlight matching parentheses.
