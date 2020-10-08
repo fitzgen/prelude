@@ -35,6 +35,9 @@
 (with-eval-after-load 'company
   (define-key company-active-map [tab] 'company-complete-common-or-cycle))
 
+;; Disable prelude's `C-c d` so I can use it for zetteldeft.
+(define-key prelude-mode-map (kbd "C-c d") nil)
+
 ;; ============================== SETTINGS TWEAKS ==============================
 
 (let ((trustfile
