@@ -26,3 +26,5 @@ network-security.data
 prelude-cheatsheet.el
 prelude-cheatsheet.aux
 prelude-cheatsheet.log
+.lsp-session-v1
+transient/
