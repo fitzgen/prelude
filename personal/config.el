@@ -80,11 +80,15 @@
 (setq mouse-wheel-progressive-speed nil)
 
 ;; Delete trailing whitespace on save.
-(setq should-delete-trailing-whitespace t)
+(defcustom delete-trailing-whitespace-on-save t
+  "Whether to delete trailing whitespace on save or not"
+  :type '(boolean)
+  :options '(t nil))
 (add-hook 'before-save-hook
           (lambda ()
-            (when should-delete-trailing-whitespace
+            (when delete-trailing-whitespace-on-save
               (delete-trailing-whitespace))))
+(setq-default show-trailing-whitespace t)
 
 ;; Get rid of thick separators.
 (fringe-mode 0)
