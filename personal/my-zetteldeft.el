@@ -8,7 +8,7 @@
 
 (with-eval-after-load 'deft
   (define-key deft-mode-map
-    (kbd "<tab>") 'efls/deft-open-preview))
+    (kbd "<tab>") 'deft-open-file-other-window))
 
 (use-package zetteldeft
   :ensure t
