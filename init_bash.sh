@@ -1,0 +1,1 @@
+TERM=emacs-shell-color

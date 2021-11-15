@@ -31,6 +31,7 @@
              (local-set-key (kbd "C-c C-c") 'my-compile)
              (local-set-key (kbd "C-c C-e") 'lsp-rust-analyzer-expand-macro)
              (local-set-key (kbd "M-.") #'lsp-find-definition)
+             (local-set-key (kbd "M-?") #'lsp-find-references)
              (local-set-key (kbd "TAB") #'company-indent-or-complete-common)
 
              ;; ;; Racer seems to be better at finding definitions than rust-analyzer.
