@@ -178,5 +178,8 @@
   :modes (text-mode markdown-mode gfm-mode))
 (add-to-list 'flycheck-checkers 'proselint)
 
+;; For Cranelift's ISLE DSL.
+(add-to-list 'auto-mode-alist '("\\.isle\\'" . lisp-mode))
+
 (provide 'config)
 ;;; config.el ends here
