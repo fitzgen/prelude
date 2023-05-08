@@ -93,13 +93,6 @@
 ;; Get rid of thick separators.
 (fringe-mode 0)
 
-;; Enable linum-mode for all modes except inside special buffers.
-(add-hook 'change-major-mode-hook
-          (lambda ()
-            (unless (or (string-match "^\*.+\*$" (buffer-name))
-                        (string-match "^magit:.\*$" (buffer-name)))
-              (linum-mode t))))
-
 ;; Add a hot key to turn line numbers on or off.
 (global-set-key "\M-n" 'display-line-numbers-mode)
 
