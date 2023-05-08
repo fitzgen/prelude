@@ -100,10 +100,8 @@
                         (string-match "^magit:.\*$" (buffer-name)))
               (linum-mode t))))
 
-;; Change the format of linum-mode and add a hotkey to toggle it on
-;; and off.
-(setq linum-format "%4d ")
-(global-set-key "\M-n" 'linum-mode)
+;; Add a hot key to turn line numbers on or off.
+(global-set-key "\M-n" 'display-line-numbers-mode)
 
 ;; Highlight the line that the cursor is on.
 (global-hl-line-mode 1)
