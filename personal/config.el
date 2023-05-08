@@ -181,8 +181,9 @@
 ;; For Cranelift's ISLE DSL.
 (add-to-list 'auto-mode-alist '("\\.isle\\'" . lisp-mode))
 
-;; WAT.
+;; WAT/WAST.
 (add-to-list 'auto-mode-alist '("\\.wat\\'" . lisp-mode))
+(add-to-list 'auto-mode-alist '("\\.wast\\'" . lisp-mode))
 
 (provide 'config)
 ;;; config.el ends here
