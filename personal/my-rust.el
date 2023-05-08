@@ -21,7 +21,6 @@
 
 (add-hook 'rust-mode-hook
           '(lambda ()
-             (linum-mode t)
              (company-mode)
 
              (lsp)

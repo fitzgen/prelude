@@ -59,8 +59,7 @@
 
 (add-hook 'js-mode-hook '(lambda ()
                            (maybe-enable-mozilla-eslint)
-                           (flycheck-mode t)
-                           (linum-mode t)))
+                           (flycheck-mode t)))
 
 ;; Make js2-mode an alias for js-mode so that source which specifies
 ;; js2-mode doesn't mess with us.
