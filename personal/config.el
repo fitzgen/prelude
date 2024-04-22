@@ -3,6 +3,28 @@
 ;; (add-to-list 'package-archives
 ;;              '("marmalade" . "http://marmalade-repo.org/packages/"))
 
+;; (defun sh/current-time-microseconds ()
+;;   "Return the current time formatted to include microseconds."
+;;   (let* ((nowtime (current-time))
+;;          (now-ms (nth 2 nowtime)))
+;;     (concat (format-time-string "[%Y-%m-%dT%T" nowtime) (format ".%d]" now-ms))))
+
+;; (defun sh/ad-timestamp-message (FORMAT-STRING &rest args)
+;;   "Advice to run before `message' that prepends a timestamp to each message.
+
+;; Activate this advice with:
+;; (advice-add 'message :before 'sh/ad-timestamp-message)"
+;;   (unless (string-equal FORMAT-STRING "%s%s")
+;;     (let ((deactivate-mark nil)
+;;           (inhibit-read-only t))
+;;       (with-current-buffer "*Messages*"
+;;         (goto-char (point-max))
+;;         (if (not (bolp))
+;;             (newline))
+;;         (insert (sh/current-time-microseconds) " ")))))
+
+;; (advice-add 'message :before 'sh/ad-timestamp-message)
+
 ;; ============================== UTILITIES ====================================
 
 (fset 'down-and-tab
@@ -60,7 +82,7 @@
 ;; Company mode should put annotations on the right.
 (setq company-tooltip-align-annotations t)
 (setq company-minimum-prefix-length 1)
-(setq company-idle-delay 0.0)
+(setq company-idle-delay 0.05)
 
 ;; Keep the menu bar.
 (menu-bar-mode 1)
@@ -92,6 +114,9 @@
 
 ;; Get rid of thick separators.
 (fringe-mode 0)
+
+;; Disable smartparens-mode as it messes with my keybindings.
+(advice-add #'smartparens-mode :before-until (lambda (&rest args) t))
 
 ;; Add a hot key to turn line numbers on or off.
 (global-set-key "\M-n" 'display-line-numbers-mode)

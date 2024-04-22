@@ -23,11 +23,14 @@
           '(lambda ()
              (company-mode)
 
+             (setq whitespace-line-column 100)
+
              (lsp)
              (lsp-ui-mode)
              (lsp-ui-doc-enable nil)
 
-             (local-set-key (kbd "C-c C-c") 'my-compile)
+             ;; (local-set-key (kbd "C-c C-c") 'my-compile)
+             (local-set-key (kbd "C-c C-c") #'compile)
              (local-set-key (kbd "C-c C-e") 'lsp-rust-analyzer-expand-macro)
              (local-set-key (kbd "M-.") #'lsp-find-definition)
              (local-set-key (kbd "M-?") #'lsp-find-references)
