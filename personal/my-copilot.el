@@ -6,7 +6,7 @@
                    dash
                    editorconfig
                    company)))
-  (package-initialize)
+  ; (package-initialize)
   (when-let ((to-install (map-filter (lambda (pkg _) (not (package-installed-p pkg))) pkg-list)))
     (package-refresh-contents)
     (mapc (lambda (pkg) (package-install pkg)) pkg-list)))
@@ -20,7 +20,7 @@
 ;; (copilot-login)
 
 ;; Enable copilot everywhere...
-(global-copilot-mode)
+;; (global-copilot-mode)
 
 ;; ...but then disable it in certain modes.
 (defun no-copilot-mode ()
@@ -44,7 +44,7 @@
   "When copilot should not automatically show completions."
   (or (member major-mode no-copilot-modes)
       (company--active-p)))
-(add-to-list 'copilot-disable-predicates #'rk/copilot-disable-predicate)
+(add-to-list 'copilot-disable-predicates #'copilot-disable-predicate)
 
 (defun my-copilot-complete-or-accept ()
   "Command that either triggers a completion or accepts one if one
