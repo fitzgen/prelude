@@ -17,7 +17,8 @@
  '(lsp-rust-server 'rust-analyzer)
  '(lsp-signature-render-documentation nil)
  '(lsp-rust-analyzer-server-command
-   (list (expand-file-name "~/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/bin/rust-analyzer"))))
+   (list (expand-file-name "~/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/bin/rust-analyzer")))
+ '(lsp-rust-analyzer-cargo-target-dir t))
 
 (add-hook 'rust-mode-hook
           '(lambda ()
