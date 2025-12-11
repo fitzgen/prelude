@@ -21,28 +21,28 @@
  '(lsp-rust-analyzer-cargo-target-dir t))
 
 (add-hook 'rust-mode-hook
-          '(lambda ()
-             (company-mode)
+          #'(lambda ()
+              (company-mode)
 
-             (setq whitespace-line-column 100)
+              (setq whitespace-line-column 100)
 
-             (lsp)
-             (lsp-ui-mode)
-             (lsp-ui-doc-enable nil)
+              (lsp)
+              (lsp-ui-mode)
+              (lsp-ui-doc-enable nil)
 
-             ;; (local-set-key (kbd "C-c C-c") 'my-compile)
-             (local-set-key (kbd "C-c C-c") #'compile)
-             (local-set-key (kbd "C-c C-e") 'lsp-rust-analyzer-expand-macro)
-             (local-set-key (kbd "M-.") #'lsp-find-definition)
-             (local-set-key (kbd "M-?") #'lsp-find-references)
-             (local-set-key (kbd "TAB") #'company-indent-or-complete-common)
+              ;; (local-set-key (kbd "C-c C-c") 'my-compile)
+              (local-set-key (kbd "C-c C-c") #'compile)
+              (local-set-key (kbd "C-c C-e") 'lsp-rust-analyzer-expand-macro)
+              (local-set-key (kbd "M-.") #'lsp-find-definition)
+              (local-set-key (kbd "M-?") #'lsp-find-references)
+              (local-set-key (kbd "TAB") #'company-indent-or-complete-common)
 
-             ;; ;; Racer seems to be better at finding definitions than rust-analyzer.
-             ;; ;; (racer-activate)
-             ;; ;; (local-set-key (kbd "M-.") #'racer-find-definition)
-             ;; ;; (racer-turn-on-eldoc)
-             ;; ;; (local-set-key (kbd "TAB") #'racer-complete-or-indent)
-             ))
+              ;; ;; Racer seems to be better at finding definitions than rust-analyzer.
+              ;; ;; (racer-activate)
+              ;; ;; (local-set-key (kbd "M-.") #'racer-find-definition)
+              ;; ;; (racer-turn-on-eldoc)
+              ;; ;; (local-set-key (kbd "TAB") #'racer-complete-or-indent)
+              ))
 
 ;; Racer rust autocomplete config
 ;; (setq racer-rust-src-path (expand-file-name "~/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/"))
