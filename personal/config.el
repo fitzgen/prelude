@@ -1,5 +1,9 @@
 (require 'page-ext)
 
+(setq explicit-shell-file-name "/bin/bash")
+(setq explicit-bash-args '("-i" "-l"))
+(setq window-min-width 120)
+
 ;; (add-to-list 'package-archives
 ;;              '("marmalade" . "http://marmalade-repo.org/packages/"))
 
@@ -67,13 +71,17 @@
         "\\\\" "/"
         (replace-regexp-in-string
          "\n" ""
-         (shell-command-to-string "python -m certifi")))))
+         (shell-command-to-string "python3 -m certifi")))))
   (setq tls-program
         (list
          (format "gnutls-cli%s --x509cafile %s -p %%p %%h"
                  (if (eq window-system 'w32) ".exe" "") trustfile)))
   (setq gnutls-verify-error t)
   (setq gnutls-trustfiles (list trustfile)))
+
+(require 'gnutls)
+(add-to-list 'gnutls-trustfiles "/etc/ssl/cert.pem")
+(add-to-list 'gnutls-trustfiles "/private/etc/ssl/cert.pem")
 
 ;; Start the emacs server, so that programs that need to open $EDITOR open
 ;; emacs.
