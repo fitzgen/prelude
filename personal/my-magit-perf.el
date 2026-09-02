@@ -66,36 +66,69 @@
 ;; `magit-file-dispatch', from `magit-get-mode-buffer', from diff-hl, and once
 ;; per auto-revert cycle.  Magit only caches it *within* a single refresh.
 ;;
-;; Correctness note: the cache is keyed on the directory that actually contains
-;; the dominating ".git", found with `locate-dominating-file' -- pure
-;; filesystem, no subprocess.  If a .git appears or disappears anywhere on the
-;; path, the key changes and we re-run git.  That makes it safe against
-;; `git init' / `git clone' / `git worktree add' / repo deletion, which is the
-;; failure mode you actually care about: Magit must never act on the wrong
-;; repository.
+;; Correctness note: the cache is keyed by `my/magit--repo-key', which is
+;; derived from the dominating ".git" -- pure filesystem, no subprocess.  If a
+;; .git appears or disappears anywhere on the path, the key changes and we
+;; re-run git.  That makes it safe against `git init' / `git clone' /
+;; `git worktree add' / repo deletion, which is the failure mode you actually
+;; care about: Magit must never act on the wrong repository.
+
+(defconst my/magit--control-dir-regexp "\\(?:\\`\\|/\\)\\.git/"
+  "Matches a path that descends *into* a \".git\" directory.
+
+A linked worktree's \".git\" is a plain file, so this never matches a
+worktree root -- only control directories such as
+\"<main>/.git/worktrees/<name>/\" and \"<super>/.git/modules/<name>/\".")
+
+(defun my/magit--repo-key (dir)
+  "Return a cache key identifying the repository DIR belongs to, or nil.
+
+The obvious key -- the nearest ancestor containing a \".git\", per
+`locate-dominating-file' -- is wrong for any directory *inside* a control
+directory, because walking up from there finds the *enclosing* repository's
+\".git\" and buckets the two together.
+
+That is not hypothetical.  A linked worktree's COMMIT_EDITMSG lives at
+\"<main>/.git/worktrees/<name>/COMMIT_EDITMSG\", so the commit message
+buffer's `default-directory' is that control directory, and
+`magit-commit-diff' resolves the repository from it.  With the naive key it
+shares a cache entry with the main worktree -- so Magit shows you the main
+worktree's staged changes while you write a linked worktree's commit
+message, and would commit them against the wrong tree.  Submodule control
+directories have the same shape.
+
+Inside a control directory, key on DIR itself instead: the answer is just as
+stable, it merely cannot be shared with the surrounding worktree."
+  (if (string-match-p my/magit--control-dir-regexp (expand-file-name dir))
+      (cons 'control-dir (expand-file-name (file-name-as-directory dir)))
+    (let ((anchor (ignore-errors (locate-dominating-file dir ".git"))))
+      ;; Not in a repo (or unreadable): don't cache a negative, it is the
+      ;; case most likely to change under us.
+      (and anchor (cons 'worktree (expand-file-name anchor))))))
 
 (defvar my/magit-toplevel-cache (make-hash-table :test 'equal)
-  "Cache of dominating-.git-directory -> `magit-toplevel' result.")
+  "Cache of (REPO-KEY . FIND-FILE-VISIT-TRUENAME) -> `magit-toplevel' result.")
 
 (defun my/magit-toplevel-cached (orig &optional directory)
-  "Around advice for `magit-toplevel' that caches per repository root."
+  "Around advice for `magit-toplevel' that caches per repository root.
+`find-file-visit-truename' is part of the key because `magit-toplevel'
+documents that it changes the answer, and `magit-commit-message-buffer'
+binds it to t and then compares results for `equal'."
   (let ((dir (or directory default-directory)))
     (if (or (not (stringp dir))
             (file-remote-p dir))
         (funcall orig directory)
-      (let ((anchor (ignore-errors (locate-dominating-file dir ".git"))))
-        (if (null anchor)
-            ;; Not in a repo (or unreadable): don't cache a negative, it is
-            ;; the case most likely to change under us.
+      (let ((repo (my/magit--repo-key dir)))
+        (if (null repo)
             (funcall orig directory)
-          (let* ((key (expand-file-name anchor))
+          (let* ((key (cons repo find-file-visit-truename))
                  (hit (gethash key my/magit-toplevel-cache 'miss)))
             (if (eq hit 'miss)
                 (puthash key (funcall orig directory) my/magit-toplevel-cache)
               hit)))))))
 
 (defvar my/magit-gitdir-cache (make-hash-table :test 'equal)
-  "Cache of dominating-.git-directory -> `magit-gitdir' result.")
+  "Cache of REPO-KEY -> `magit-gitdir' result.")
 
 (defun my/magit-gitdir-cached (orig &optional directory)
   "Around advice for `magit-gitdir', cached like `my/magit-toplevel-cached'.
@@ -105,11 +138,10 @@
     (if (or (not (stringp dir))
             (file-remote-p dir))
         (funcall orig directory)
-      (let ((anchor (ignore-errors (locate-dominating-file dir ".git"))))
-        (if (null anchor)
+      (let ((key (my/magit--repo-key dir)))
+        (if (null key)
             (funcall orig directory)
-          (let* ((key (expand-file-name anchor))
-                 (hit (gethash key my/magit-gitdir-cache 'miss)))
+          (let ((hit (gethash key my/magit-gitdir-cache 'miss)))
             (if (eq hit 'miss)
                 (puthash key (funcall orig directory) my/magit-gitdir-cache)
               hit)))))))
@@ -207,7 +239,9 @@ Only needed if a symlink above a repository was retargeted."
   (message "my/magit-perf: caches flushed"))
 
 ;; Cheap insurance: repo topology changes Magit itself performs.
-(dolist (cmd '(magit-init magit-clone))
+(dolist (cmd '(magit-init magit-clone
+                magit-worktree-checkout magit-worktree-branch
+                magit-worktree-move magit-worktree-delete))
   (advice-add cmd :before (lambda (&rest _) (my/magit-flush-caches))
               '((name . my/magit-flush-caches))))
 
