@@ -31,6 +31,13 @@
   "Latency workarounds for slow process spawning."
   :group 'magit)
 
+(defcustom my/git-batch-threshold 2
+  "Batch diff-hl's git queries when more than this many buffers need them.
+See section 8.  At or below it the one batched process costs about as much as
+the calls it would replace, so it is not worth the extra output to parse."
+  :type 'integer
+  :group 'my/magit-perf)
+
 
 ;;;; ------------------------------------------------------------------
 ;;;; 1. Shave the per-spawn constant
@@ -282,15 +289,31 @@ Only needed if a symlink above a repository was retargeted."
 
 (defconst my/diff-hl--unmodified-states '(up-to-date ignored unregistered))
 
-(defun my/file-under-dir-p (file topdir)
-  "Return non-nil if FILE is under TOPDIR.
+(defconst my/case-insensitive-fs (memq system-type '(darwin windows-nt))
+  "Non-nil when file names on this system compare case-insensitively.")
+
+(defun my/file-relative-to-dir (file topdir)
+  "Return FILE's path relative to TOPDIR, or nil if FILE is not under it.
 TOPDIR must already be a truename with a trailing slash.  The fast path is a
 string comparison; only unusual layouts (symlinked checkouts) pay for a
-truename, and that one is cached."
-  (let ((ci (memq system-type '(darwin windows-nt))))
-    (or (string-prefix-p topdir file ci)
-        (let ((d (file-name-directory file)))
-          (and d (string-prefix-p topdir (my/truename-dir d) ci))))))
+truename, and that one is cached.
+
+The relative path is what Git wants to be asked about, so computing it here
+costs nothing extra and saves the batched queries in section 8 a conversion."
+  (let ((ci my/case-insensitive-fs))
+    (if (string-prefix-p topdir file ci)
+        (substring file (length topdir))
+      (let ((d (file-name-directory file)))
+        (and d
+             (let ((true-d (my/truename-dir d)))
+               (and (string-prefix-p topdir true-d ci)
+                    (concat (substring true-d (length topdir))
+                            (file-name-nondirectory file)))))))))
+
+(defun my/file-under-dir-p (file topdir)
+  "Return non-nil if FILE is under TOPDIR.
+TOPDIR must already be a truename with a trailing slash."
+  (and (my/file-relative-to-dir file topdir) t))
 
 (defun my/diff-hl--update-buffer (buf modified-files)
   "Recompute diff-hl gutters for BUF, exactly as stock does."
@@ -314,8 +337,14 @@ truename, and that one is cached."
 
 (defun my/diff-hl-magit-post-refresh ()
   "Cheaper drop-in for `diff-hl-magit-post-refresh'.
-Same work, same order of operations; avoids the recursive `file-truename'
-calls that `file-in-directory-p' makes for every buffer."
+Same work, same order of operations, same results.  Two things are different
+from stock: the containment test avoids the recursive `file-truename' calls
+that `file-in-directory-p' makes for every buffer, and the per-file `git
+status' and `git diff-index' calls that every candidate buffer would make are
+answered from one batched invocation each (section 8).
+
+Buffers you can actually see are updated first, so the visible gutters settle
+before the rest."
   (unless (and (bound-and-true-p diff-hl-disable-on-remote)
                (file-remote-p default-directory))
     (let ((topdir (ignore-errors (magit-toplevel))))
@@ -325,22 +354,34 @@ calls that `file-in-directory-p' makes for every buffer."
                (ignore-errors
                  (magit-git-items "diff-tree" "-z" "--name-only"
                                   "-r" "HEAD~" "HEAD")))
+              (candidates nil)
               (visible nil)
               (hidden nil))
           (dolist (buf (buffer-list))
             (let ((file (buffer-local-value 'buffer-file-name buf)))
               (when (and file
                          (buffer-local-value 'diff-hl-mode buf)
-                         (not (buffer-modified-p buf))
-                         (my/file-under-dir-p file top)
-                         (file-exists-p file))
-                (if (get-buffer-window buf 'visible)
-                    (push buf visible)
-                  (push buf hidden)))))
-          (dolist (buf (nreverse visible))
-            (my/diff-hl--update-buffer buf modified-files))
-          (dolist (buf (nreverse hidden))
-            (my/diff-hl--update-buffer buf modified-files)))))))
+                         (not (buffer-modified-p buf)))
+                (let ((rel (my/file-relative-to-dir file top)))
+                  (when (and rel (file-exists-p file))
+                    ;; Every buffer under TOPDIR still gets updated; only the
+                    ;; ones this repository can actually answer for are
+                    ;; batched.
+                    (when (my/git--same-repo-p file top)
+                      (push (list buf file rel) candidates))
+                    (if (get-buffer-window buf 'visible)
+                        (push buf visible)
+                      (push buf hidden)))))))
+          (setq candidates (nreverse candidates)
+                visible    (nreverse visible)
+                hidden     (nreverse hidden))
+          (my/git-call-with-batched-queries
+           top candidates
+           (lambda ()
+             (dolist (buf visible)
+               (my/diff-hl--update-buffer buf modified-files))
+             (dolist (buf hidden)
+               (my/diff-hl--update-buffer buf modified-files)))))))))
 
 (with-eval-after-load 'diff-hl
   (remove-hook 'magit-post-refresh-hook #'diff-hl-magit-post-refresh)
@@ -562,6 +603,9 @@ gitdir cache              : %d entries
 truename cache            : %d entries
 status sections           : %s
 diff-hl post-refresh      : synchronous (cheap containment test)
+diff-hl git queries       : %s
+ref labels from for-each-ref : %s
+savehist autosave         : %s
 auto-revert-avoid-polling : %s (interval %s)
 vc-handled-backends       : %s
 related refs in revisions : %s
@@ -582,6 +626,14 @@ Commands
         (hash-table-count my/magit-gitdir-cache)
         (hash-table-count my/truename-dir-cache)
         (if my/magit-status-fast-mode "fast (trimmed)" "stock (untouched)")
+        (if (advice-member-p #'my/vc-git-state-batched 'vc-git-state)
+            (format "batched above %d buffers" my/git-batch-threshold)
+          "one process per buffer")
+        (if (advice-member-p #'my/magit-rev-verify-cached 'magit-rev-verify)
+            "yes" "no")
+        (if (and (bound-and-true-p savehist-timer)
+                 (timer--idle-delay savehist-timer))
+            "on an idle timer" "on a wall-clock timer")
         auto-revert-avoid-polling
         auto-revert-interval
         vc-handled-backends
@@ -678,6 +730,11 @@ the bottleneck is somewhere I have not found."
     (when (fboundp fn) (advice-remove fn #'my/magit-rev-parse-topology-cached)))
   (remove-hook 'magit-post-refresh-hook #'my/diff-hl-magit-post-refresh)
   (add-hook    'magit-post-refresh-hook #'diff-hl-magit-post-refresh)
+  (advice-remove 'vc-git-state #'my/vc-git-state-batched)
+  (advice-remove 'vc-git-registered #'my/vc-git-registered-batched)
+  (advice-remove 'diff-hl-diff-against-reference
+                 #'my/diff-hl-diff-against-reference-batched)
+  (advice-remove 'magit-rev-verify #'my/magit-rev-verify-cached)
   (my/magit-flush-caches)
   (message "my/magit-perf: disabled; Magit is stock now"))
 
@@ -691,7 +748,404 @@ the bottleneck is somewhere I have not found."
     (when (fboundp fn) (advice-add fn :around #'my/magit-rev-parse-topology-cached)))
   (remove-hook 'magit-post-refresh-hook #'diff-hl-magit-post-refresh)
   (add-hook    'magit-post-refresh-hook #'my/diff-hl-magit-post-refresh)
+  (advice-add 'vc-git-state :around #'my/vc-git-state-batched)
+  (advice-add 'vc-git-registered :around #'my/vc-git-registered-batched)
+  (advice-add 'diff-hl-diff-against-reference :around
+              #'my/diff-hl-diff-against-reference-batched)
+  (advice-add 'magit-rev-verify :around #'my/magit-rev-verify-cached)
   (message "my/magit-perf: enabled"))
+
+
+;;;; ------------------------------------------------------------------
+;;;; 8. Ask git once per question, not once per buffer
+;;;; ------------------------------------------------------------------
+
+;; Section 3 made the diff-hl post-refresh pass cheap in Lisp.  What it did
+;; not touch is the process count, and that is most of what the latest
+;; profile has left in it:
+;;
+;;   my/diff-hl-magit-post-refresh                        50
+;;     vc-state-refresh -> vc-git-state -> process-file   21
+;;     diff-hl-update ...                                 17
+;;   diff-hl-update (rest of the same pass)               26
+;;     diff-hl-changes -> vc-git-diff -> process-file     23
+;;
+;; Both are O(file buffers in the repository).  diff-hl asks two questions per
+;; buffer and each one is its own git process:
+;;
+;;   git status --porcelain -z --untracked-files --ignored -- FILE
+;;   git diff-index --exit-code -U0 -p HEAD -- FILE
+;;
+;; git answers either question for any number of paths in a single invocation,
+;; and the answers are per-path, so batching loses nothing.  With 20 open
+;; buffers that is 40 processes replaced by 2 -- at 40-800 ms of endpoint-agent
+;; tax per spawn, the entire second half of the profile.
+;;
+;; The mechanism is two tables and two pieces of advice.  Each table is bound
+;; only around the update loops, and only ever *answers* a question that was
+;; going to be asked anyway; a miss falls through to the stock function.  So
+;; the worst case of a bad prediction is an extra process, never a wrong
+;; gutter -- and anything unexpected (git failing, output that cannot be
+;; attributed to a requested file) abandons the whole batch rather than
+;; guessing.
+
+(eval-when-compile
+  (require 'magit-git nil t)
+  (require 'diff-hl nil t)
+  (require 'vc-git nil t)
+  (require 'vc-hg nil t))
+
+(declare-function vc-git--git-status-to-vc-state "vc-git" (code-list))
+(declare-function vc-git-diff "vc-git" (files &optional rev1 rev2 buffer async))
+(declare-function magit-git-insert "magit-git" (&rest args))
+
+(defconst my/git-batch-chunk 200
+  "Maximum number of path arguments per batched git invocation.
+Only a guard against blowing the argument limit in a repository with a very
+large number of open buffers; one chunk is the normal case.")
+
+(defun my/git--chunks (list)
+  "Split LIST into sublists of at most `my/git-batch-chunk' elements."
+  (let (chunks)
+    (while list
+      (let ((n my/git-batch-chunk)
+            (chunk nil))
+        (while (and list (> n 0))
+          (push (pop list) chunk)
+          (setq n (1- n)))
+        (push (nreverse chunk) chunks)))
+    (nreverse chunks)))
+
+(defun my/git--path-key (path)
+  "Return a hash key for repository-relative PATH.
+Case-folded where the filesystem is, so that a buffer visiting \"Foo.el\"
+still matches the \"foo.el\" git has recorded."
+  (if my/case-insensitive-fs (downcase path) path))
+
+(defun my/git--items-checked (&rest args)
+  "Like `magit-git-items', but return the symbol `error' if git fails.
+`magit-git-items' cannot tell \"no output\" from \"git blew up\", and here
+that difference decides whether a file looks clean."
+  (let ((env process-environment))
+    (with-temp-buffer
+      (setq-local process-environment env)
+      (if (zerop (apply #'magit-git-insert (flatten-tree args)))
+          (split-string (buffer-string) "\0" t)
+        'error))))
+
+;;; The `git status' batch.
+
+(defvar my/vc-git--state-table nil
+  "Hash of absolute file name -> `vc-state' symbol, or nil.
+Bound only around the diff-hl post-refresh pass.")
+
+(defun my/vc-git-state-batched (orig file)
+  "Answer FILE's state from `my/vc-git--state-table' when it is in there."
+  (let ((hit (if my/vc-git--state-table
+                 (gethash (expand-file-name file)
+                          my/vc-git--state-table 'miss)
+               'miss)))
+    (if (eq hit 'miss)
+        (funcall orig file)
+      hit)))
+
+(with-eval-after-load 'vc-git
+  (advice-add 'vc-git-state :around #'my/vc-git-state-batched))
+
+(defun my/git--same-repo-p (file topdir)
+  "Return non-nil if FILE's own repository root is TOPDIR.
+A file inside a submodule is under TOPDIR but git answers questions about it
+from the submodule, so a batch run at TOPDIR would say nothing about it -- and
+\"git said nothing\" means \"clean\".  Such files keep their own processes."
+  (let ((root (ignore-errors (vc-git-root file))))
+    (and root (equal (my/truename-dir root) topdir))))
+
+(defun my/vc-git-registered-batched (orig file)
+  "Answer `vc-git-registered' for FILE from `my/vc-git--state-table'.
+Every state the table can report except `unregistered' settles the question:
+`ignored' means git is not tracking the file and never was, and anything else
+means it is in the index or in HEAD.  `unregistered' is the one ambiguous
+answer -- plain `??', but also the \"deleted from the index, still in HEAD and
+in the working tree\" pair -- so it goes to ORIG."
+  (let ((hit (if my/vc-git--state-table
+                 (gethash (expand-file-name file) my/vc-git--state-table 'miss)
+               'miss)))
+    (cond ((memq hit '(miss unregistered)) (funcall orig file))
+          ((eq hit 'ignored) nil)
+          (t t))))
+
+(with-eval-after-load 'vc-git
+  (advice-add 'vc-git-registered :around #'my/vc-git-registered-batched))
+
+(defun my/vc-git--build-state-table (topdir candidates)
+  "Return a hash of absolute file name -> `vc-state' for CANDIDATES.
+CANDIDATES is a list of (BUFFER FILE RELATIVE-PATH).
+
+Runs one `git status --porcelain' for the whole set, with exactly the
+arguments `vc-git-state' passes for a single file, and feeds the resulting
+two-character codes to `vc-git--git-status-to-vc-state' -- so each answer is
+the one the stock per-file call would have produced, including its quirks.  A
+path git says nothing about is clean, which is what an empty code list means
+to that function too.
+
+Returns nil if git failed, which makes the caller fall back to the per-file
+calls rather than report everything as clean."
+  (let ((codes (make-hash-table :test 'equal))
+        (default-directory topdir)
+        (failed nil))
+    (dolist (chunk (my/git--chunks (mapcar (lambda (c) (nth 2 c)) candidates)))
+      (let ((items (my/git--items-checked
+                    "status" "--porcelain" "-z"
+                    "--untracked-files" "--ignored" "--" chunk)))
+        (if (eq items 'error)
+            (setq failed t)
+          (while items
+            (let ((item (pop items)))
+              (when (> (length item) 3)
+                (let ((code (substring item 0 2))
+                      (path (substring item 3)))
+                  ;; A rename or copy is followed by a second record holding
+                  ;; the source path.  It is not a status line of its own.
+                  (when (memq (aref code 0) '(?R ?C))
+                    (pop items))
+                  (push code (gethash (my/git--path-key path) codes)))))))))
+    (unless failed
+      (let ((table (make-hash-table :test 'equal)))
+        (dolist (c candidates table)
+          (puthash (expand-file-name (nth 1 c))
+                   (vc-git--git-status-to-vc-state
+                    (nreverse (gethash (my/git--path-key (nth 2 c)) codes)))
+                   table))))))
+
+;;; The `git diff-index' batch.
+
+(defvar my/diff-hl--diff-table nil
+  "Hash of absolute file name -> diff text, or nil.
+Bound only around the diff-hl post-refresh pass.")
+
+(defun my/diff-hl-diff-against-reference-batched (orig file backend buffer
+                                                       &optional new-rev)
+  "Serve FILE's diff from `my/diff-hl--diff-table' when it is in there.
+Only the plain \"working tree against HEAD\" question is answered from the
+table.  Every other combination of arguments -- an explicit revision, a
+reference revision, the `git-index' variant used when
+`diff-hl-show-staged-changes' is nil -- is a different diff, and goes to
+ORIG."
+  (let ((hit (if (and my/diff-hl--diff-table
+                      (null new-rev)
+                      (null diff-hl-reference-revision)
+                      (bound-and-true-p diff-hl-show-staged-changes)
+                      (eq backend 'Git))
+                 (gethash (expand-file-name file) my/diff-hl--diff-table 'miss)
+               'miss)))
+    (if (eq hit 'miss)
+        (funcall orig file backend buffer new-rev)
+      (with-current-buffer (get-buffer-create buffer)
+        (let ((inhibit-read-only t))
+          (setq buffer-read-only nil)
+          (erase-buffer)
+          (insert hit)))
+      ;; Stock ends with a bare BUFFER and `diff-hl-changes' stores that.
+      buffer)))
+
+(with-eval-after-load 'diff-hl
+  (advice-add 'diff-hl-diff-against-reference :around
+              #'my/diff-hl-diff-against-reference-batched))
+
+(defun my/diff-hl--dirty (candidates state-table)
+  "Return the CANDIDATES diff-hl is about to run `git diff' for.
+Those are the ones whose refreshed state `diff-hl-modified-p' accepts.
+Guessing wrong is cheap in both directions: a needless path in the batch, or
+one stock call that was going to happen anyway."
+  (let (dirty)
+    (dolist (c candidates (nreverse dirty))
+      (when (memq (gethash (expand-file-name (nth 1 c)) state-table)
+                  '(edited conflict))
+        (push c dirty)))))
+
+(defconst my/git--ascii-path-regexp "\\`[[:ascii:]]+\\'")
+
+(defun my/git--plain-path-p (rel)
+  "Return non-nil if git prints REL unquoted in a `diff --git' header.
+Non-ASCII, quotes, backslashes and control characters all get C-style
+quoting, which this file does not try to undo; such files keep their own
+process."
+  (and (string-match-p my/git--ascii-path-regexp rel)
+       (not (string-match-p "[\"\\\\[:cntrl:]]" rel))))
+
+(defun my/diff-hl--build-diff-table (topdir dirty)
+  "Return a hash of absolute file name -> diff text for DIRTY.
+
+One `git diff-index' for the whole set, run through `vc-git-diff' inside
+`diff-hl-with-diff-switches' so the command and its switches (notably -U0)
+are byte-for-byte the ones diff-hl would have used per file, then split on
+the `diff --git' headers.  Every requested file is seeded with the empty
+string, because \"git printed no hunk for it\" is a real answer.
+
+Returns nil -- meaning \"fall back to one process per file\" -- if git failed
+or if any chunk of output cannot be attributed to a requested file.  A diff
+served to the wrong buffer would be a wrong gutter, so anything unrecognised
+abandons the batch instead of guessing."
+  (let ((batchable (cl-remove-if-not
+                    (lambda (c) (my/git--plain-path-p (nth 2 c)))
+                    dirty))
+        (table (make-hash-table :test 'equal))
+        (abs (make-hash-table :test 'equal))
+        (headers (make-hash-table :test 'equal))
+        (ok t))
+    (when batchable
+      (dolist (c batchable)
+        (let ((rel (nth 2 c))
+              (file (expand-file-name (nth 1 c))))
+          (puthash file "" table)
+          (puthash rel file abs)
+          ;; The two header spellings git uses, with and without diff.noprefix.
+          (puthash (concat "diff --git a/" rel " b/" rel) rel headers)
+          (puthash (concat "diff --git " rel " " rel) rel headers)))
+      (dolist (chunk (my/git--chunks batchable))
+        (when ok
+          (with-temp-buffer
+            (setq default-directory topdir)
+            (unless (condition-case nil
+                        (progn
+                          (diff-hl-with-diff-switches
+                           ;; Repository-relative paths, not absolute: TOPDIR
+                           ;; is a truename and the buffer file names may not
+                           ;; be, and `vc-do-command' relativises against
+                           ;; `default-directory' without noticing.
+                           (vc-git-diff (mapcar (lambda (c) (nth 2 c)) chunk)
+                                        nil nil (current-buffer) nil))
+                          t)
+                      (error nil))
+              (setq ok nil))
+            (when ok
+              (let ((case-fold-search nil)
+                    (starts nil))
+                (goto-char (point-min))
+                (while (re-search-forward "^diff --git " nil t)
+                  (push (match-beginning 0) starts))
+                (let ((bounds (append (nreverse starts) (list (point-max)))))
+                  (while (and ok (cdr bounds))
+                    (let* ((beg (car bounds))
+                           (end (cadr bounds))
+                           (line (buffer-substring-no-properties
+                                  beg (save-excursion
+                                        (goto-char beg)
+                                        (line-end-position))))
+                           (rel (gethash line headers)))
+                      (if (null rel)
+                          (setq ok nil)
+                        (puthash (gethash rel abs)
+                                 (buffer-substring-no-properties beg end)
+                                 table)))
+                    (setq bounds (cdr bounds))))))))))
+    (and ok batchable table)))
+
+(defun my/git-call-with-batched-queries (topdir candidates fn)
+  "Call FN with diff-hl's per-file git queries answered from batched output.
+CANDIDATES is a list of (BUFFER FILE RELATIVE-PATH).  If a table cannot be
+built it is left nil and FN runs against entirely stock behaviour."
+  (let* ((my/vc-git--state-table
+          (and (> (length candidates) my/git-batch-threshold)
+               (ignore-errors
+                 (my/vc-git--build-state-table topdir candidates))))
+         (my/diff-hl--diff-table
+          (and my/vc-git--state-table
+               (ignore-errors
+                 (my/diff-hl--build-diff-table
+                  topdir
+                  (my/diff-hl--dirty candidates my/vc-git--state-table))))))
+    (funcall fn)))
+
+
+;;;; ------------------------------------------------------------------
+;;;; 9. One `for-each-ref' instead of a `rev-parse' per ref label
+;;;; ------------------------------------------------------------------
+
+;; `magit-log-wash-rev' -> `magit-format-ref-labels' is 21 samples, and it
+;; runs once per commit in the log section.  For every ref decorating a
+;; commit it asks git whether a tag of that name exists:
+;;
+;;   (magit-rev-verify (concat "refs/tags/" name))   ; git rev-parse --verify
+;;
+;; `magit-rev-verify' goes through `magit-git-string', which *is*
+;; refresh-cached, so repeats within one refresh are free -- but each distinct
+;; refname is still its own process.  `git for-each-ref' lists every ref and
+;; its object id in one, and the listing is exhaustive: a name absent from it
+;; does not exist, which is exactly what `rev-parse --verify' reports by
+;; returning nil.  For an annotated tag both give the tag object's id.
+;;
+;; Restricted to full "refs/..." names made of ordinary characters, because
+;; those are the ones `for-each-ref' enumerates verbatim.  Anything carrying
+;; revision syntax (~ ^ : @{} ..) asks git to *resolve* something, which a
+;; listing cannot answer, so those still spawn.  Short names are deliberately
+;; not handled either: resolving "main" runs git's disambiguation order over
+;; refs/, refs/tags/, refs/heads/, refs/remotes/..., and getting that subtly
+;; wrong would put the wrong label on the wrong commit.
+;;
+;; The table lives in Magit's own per-refresh cache, so it lasts exactly one
+;; `magit-refresh' and cannot go stale inside one.
+
+(defconst my/magit--plain-refname-regexp "\\`refs/[A-Za-z0-9._/+-]+\\'"
+  "Refnames this file is willing to answer from a `for-each-ref' listing.")
+
+(defun my/magit--ref-table ()
+  "Return a hash of full refname -> object id for the current repository.
+Computed once per `magit-refresh'."
+  (magit--with-refresh-cache (cons default-directory 'my/ref-table)
+    (let ((table (make-hash-table :test 'equal)))
+      (dolist (line (magit-git-lines "for-each-ref"
+                                     "--format=%(refname) %(objectname)"))
+        (let ((sep (string-search " " line)))
+          (when sep
+            (puthash (substring line 0 sep) (substring line (1+ sep)) table))))
+      table)))
+
+(defun my/magit-rev-verify-cached (orig rev)
+  "Answer REV from `my/magit--ref-table' when it is a plain full refname."
+  (if (and magit--refresh-cache
+           (stringp rev)
+           (string-match-p my/magit--plain-refname-regexp rev)
+           (not (file-remote-p default-directory)))
+      (gethash rev (my/magit--ref-table))
+    (funcall orig rev)))
+
+(with-eval-after-load 'magit-git
+  (advice-add 'magit-rev-verify :around #'my/magit-rev-verify-cached))
+
+
+;;;; ------------------------------------------------------------------
+;;;; 10. Keep unrelated timers out of the middle of a Magit command
+;;;; ------------------------------------------------------------------
+
+;; 54 of 431 samples in the profile are `timer-event-handler', and 16 of those
+;; are `savehist-autosave'.  Staging is asynchronous -- Magit waits on the git
+;; process -- and timers run during that wait, so savehist serialises every
+;; history variable with `prin1' right in the middle of the lock-up.  It does
+;; that whether or not the result differs from what is on disk.
+;;
+;; `savehist-mode' schedules it with `run-with-timer', a wall-clock timer.
+;; Nothing about the work wants that; an idle timer does the same job at a
+;; moment when you are not waiting for anything.
+;;
+;; The trade-off, stated plainly: history is now written after a minute of
+;; genuine idleness rather than every minute regardless.  `savehist-autosave'
+;; is still on `kill-emacs-hook', so a normal exit saves either way; only a
+;; crash during a long uninterrupted stretch of work loses more than before.
+
+(defun my/savehist-use-idle-timer ()
+  "Run savehist's autosave from an idle timer instead of a wall-clock one."
+  (when (timerp savehist-timer)
+    (cancel-timer savehist-timer))
+  (setq savehist-timer
+        (and savehist-autosave-interval
+             (run-with-idle-timer savehist-autosave-interval t
+                                  #'savehist-autosave))))
+
+(with-eval-after-load 'savehist
+  (add-hook 'savehist-mode-hook #'my/savehist-use-idle-timer)
+  (when (bound-and-true-p savehist-mode)
+    (my/savehist-use-idle-timer)))
 
 
 (provide 'my-magit-perf)
