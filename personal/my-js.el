@@ -1,3 +1,4 @@
+;;; -*- lexical-binding: t; -*-
 (setq js-indent-level 2)
 
 ;; (defun comment-line-p ()
@@ -57,7 +58,7 @@
           (when (file-exists-p eslint)
             (setq-local flycheck-javascript-eslint-executable eslint)))))))
 
-(add-hook 'js-mode-hook '(lambda ()
+(add-hook 'js-mode-hook #'(lambda ()
                            (maybe-enable-mozilla-eslint)
                            (flycheck-mode t)))
 

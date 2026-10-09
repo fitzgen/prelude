@@ -1,4 +1,4 @@
-;;; my-haskell --- My custom haskell stuff
+;;; my-haskell --- My custom haskell stuff  -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 

@@ -1,8 +1,10 @@
-;;; my-shell --- My personal customizations for shell-mode.
+;;; my-shell --- My personal customizations for shell-mode.  -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 
 ;;; Code:
+
+(require 'comint)
 
 (defun clear-shell-buffer ()
   (interactive)
@@ -11,7 +13,7 @@
 
 ;; Fix color in shell and make prompt read only.
 (add-hook 'shell-mode-hook
-          '(lambda ()
+          #'(lambda ()
              (compilation-shell-minor-mode t)
              (local-set-key (kbd "C-c l") 'clear-shell-buffer)
              (setq indent-tabs-mode nil)

@@ -1,3 +1,4 @@
+;;; -*- lexical-binding: t; -*-
 (add-hook 'typescript-mode-hook
           (lambda ()
             (tide-setup)

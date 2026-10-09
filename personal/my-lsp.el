@@ -3,7 +3,7 @@
 (require 'lsp)
 
 (add-hook 'lsp-mode-hook
-          '(lambda ()
+          #'(lambda ()
              (lsp-modeline-code-actions-mode)
              ))
 

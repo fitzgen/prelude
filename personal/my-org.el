@@ -1,5 +1,6 @@
+;;; -*- lexical-binding: t; -*-
 (add-hook 'org-mode-hook
-          '(lambda ()
+          #'(lambda ()
              (org-indent-mode 1)))
 
 (provide 'my-org)

@@ -1,3 +1,4 @@
+;;; -*- lexical-binding: t; -*-
 (defun my-compile (cmd)
   ""
   (interactive
@@ -6,7 +7,7 @@
       (switch-to-buffer-other-window "*shell*")
     (shell))
   (clear-shell-buffer)
-  (end-of-buffer)
+  (goto-char (point-max))
   (comint-kill-input)
   (insert cmd)
   (end-of-line)

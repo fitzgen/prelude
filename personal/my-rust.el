@@ -1,3 +1,4 @@
+;;; -*- lexical-binding: t; -*-
 (require 'my-lsp)
 
 (prelude-require-packages '(rust-mode

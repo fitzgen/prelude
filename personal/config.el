@@ -1,3 +1,4 @@
+;;; -*- lexical-binding: t; -*-
 (require 'page-ext)
 
 (setq explicit-shell-file-name "/bin/bash")
@@ -192,13 +193,9 @@
 (setq uniquify-separator "/")
 ;; Rename all buffers after killing a uniquified buffer. This way a uniquified
 ;; buffer can return to its normal name if possible.
-(setq uniquify-after-kill-buffer-p t)
+(setq uniquify-after-kill-buffer-flag t)
 ;; Don't mess with special buffers
 (setq uniquify-ignore-buffers-re "^\\*")
-
-;; Ensure that the emacs path is the same as the OSX path.
-(when (memq window-system '(mac ns))
-  (exec-path-from-shell-initialize))
 
 (setq split-height-threshold nil)
 (setq split-width-threshold 160)

@@ -1,3 +1,4 @@
+;;; -*- lexical-binding: t; -*-
 (use-package tuareg :ensure t)
 
 (add-to-list 'auto-mode-alist '("\\.ml\\'" . tuareg-mode))

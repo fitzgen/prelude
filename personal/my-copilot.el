@@ -1,3 +1,4 @@
+;;; -*- lexical-binding: t; -*-
 ;; https://robert.kra.hn/posts/2023-02-22-copilot-emacs-setup/
 
 ;; (require 'cl)
