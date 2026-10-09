@@ -108,6 +108,13 @@
 (setq scroll-conservatively 1)
 (setq mouse-wheel-scroll-amount '(1))
 (setq mouse-wheel-progressive-speed nil)
+;; Make control+scroll just scroll, instead of changing the font size; it's too
+;; easy to trigger accidentally on a touchpad. (`mouse-wheel-mode' installed the
+;; text-scale bindings at startup, so changing the variable above isn't enough.)
+(dolist (key '([C-wheel-up] [C-wheel-down] [C-M-wheel-up] [C-M-wheel-down]))
+  (global-set-key key #'mwheel-scroll))
+;; Likewise, don't zoom on a touchpad pinch gesture.
+(global-set-key [pinch] #'ignore)
 
 ;; Delete trailing whitespace on save.
 (defcustom delete-trailing-whitespace-on-save t
@@ -124,7 +131,20 @@
 (fringe-mode 0)
 
 ;; Disable smartparens-mode as it messes with my keybindings.
-(advice-add #'smartparens-mode :before-until (lambda (&rest args) t))
+(advice-add #'smartparens-mode :before-until (lambda (&rest _args) t))
+
+;; Don't show line numbers in special buffers like `*Messages*'. Prelude turns
+;; on `global-display-line-numbers-mode', so filter its turn-on function.
+(defun my-special-buffer-name-p (&optional buffer)
+  "Return non-nil if BUFFER's name starts and ends with an asterisk."
+  (string-match-p "\\`\\*.*\\*\\'" (buffer-name buffer)))
+(advice-add 'display-line-numbers--turn-on :before-until
+            #'my-special-buffer-name-p)
+;; Special buffers created before this point already had line numbers enabled.
+(dolist (buffer (buffer-list))
+  (when (my-special-buffer-name-p buffer)
+    (with-current-buffer buffer
+      (display-line-numbers-mode -1))))
 
 ;; Add a hot key to turn line numbers on or off.
 (global-set-key "\M-n" 'display-line-numbers-mode)
