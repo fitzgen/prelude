@@ -181,5 +181,33 @@ Intended as `:around' advice for `lsp--file-process-event'."
   (advice-add 'lsp--file-process-event :around
               #'my-lsp--file-process-event-async))
 
+;; ============================== SERVER MESSAGES ==============================
+;;
+;; When a build script or `cargo check' fails, rust-analyzer reports it with a
+;; `window/showMessage' notification that holds the whole cargo output (often
+;; hundreds of lines of backtraces). lsp-mode passes that to `message', so the
+;; echo area grows into a big window over the bottom of the frame. For messages
+;; with more than one line, log the full text to `*Messages*' without displaying
+;; it, and only echo the first line.
+
+(defun my-lsp--window-show-message-quietly (orig workspace params)
+  "Like ORIG, but don't fill the echo area with multi-line messages.
+Intended as `:around' advice for `lsp--window-show-message'; WORKSPACE and
+PARAMS are the notification's."
+  (let ((text (string-trim (lsp:show-message-request-params-message params))))
+    (if (not (string-search "\n" text))
+        (funcall orig workspace params)
+      (let ((inhibit-message t))
+        (funcall orig workspace params))
+      (let ((message-log-max nil))
+        (message "%s :: %s [full message in *Messages*]"
+                 (propertize "LSP" 'face
+                             (pcase (lsp:show-message-request-params-type params)
+                               (1 'error) (2 'warning) (_ 'success)))
+                 (substring text 0 (string-search "\n" text)))))))
+
+(advice-add 'lsp--window-show-message :around
+            #'my-lsp--window-show-message-quietly)
+
 (provide 'my-lsp)
 ;;; my-lsp.el ends here

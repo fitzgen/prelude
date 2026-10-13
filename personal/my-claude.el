@@ -24,26 +24,40 @@
 
 (use-package claude-code-ide
   :vc (:url "https://github.com/manzaltu/claude-code-ide.el" :rev :newest)
-  :bind ("C-c C-o" . claude-code-ide-menu)
+  :bind ("C-c j" . claude-code-ide-menu)
   :custom
   ;; vterm (the default) garbles Claude's TUI when its window is resized, e.g.
   ;; by splits or transient popups; ghostel is upstream's recommended backend.
   (claude-code-ide-terminal-backend 'ghostel)
+  ;; Show sessions in ordinary windows (placed by `display-buffer' like any
+  ;; other buffer) rather than in dedicated side windows.
+  (claude-code-ide-use-side-window nil)
   :config
   (exec-path-from-shell-copy-envs my-claude-env-vars)
   (claude-code-ide-emacs-tools-setup)
-  ;; Claude's TUI pads lines with spaces, which `show-trailing-whitespace'
-  ;; (enabled globally in config.el) highlights everywhere. There's no hook for
-  ;; new session buffers, so disable it on the buffer this function returns.
+  ;; There's no hook for new session buffers, so configure the buffer this
+  ;; function returns.
   (advice-add 'claude-code-ide--create-terminal-session :filter-return
-              #'my-claude-disable-trailing-whitespace))
+              #'my-claude-setup-session-buffer))
 
-(defun my-claude-disable-trailing-whitespace (buffer-and-process)
-  "Turn off `show-trailing-whitespace' in a new Claude session buffer.
+;; ghostel sends `C-g' to the terminal, where Claude opens the prompt in
+;; `$EDITOR'. Make it quit as usual instead; `C-q C-g' still sends it.
+(defvar-keymap my-claude-session-mode-map
+  "<remap> <ghostel-send-C-g>" #'keyboard-quit)
+
+(define-minor-mode my-claude-session-mode
+  "Minor mode for Claude Code session buffers."
+  :keymap my-claude-session-mode-map)
+
+(defun my-claude-setup-session-buffer (buffer-and-process)
+  "Configure a new Claude session buffer.
 BUFFER-AND-PROCESS is the cons returned by
 `claude-code-ide--create-terminal-session', and is returned unchanged."
   (with-current-buffer (car buffer-and-process)
-    (setq-local show-trailing-whitespace nil))
+    ;; Claude's TUI pads lines with spaces, which `show-trailing-whitespace'
+    ;; (enabled globally in config.el) highlights everywhere.
+    (setq-local show-trailing-whitespace nil)
+    (my-claude-session-mode 1))
   buffer-and-process)
 
 (provide 'my-claude)
